@@ -1,0 +1,87 @@
+name: Sync Playlist
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install cryptography python-dotenv
+
+      - name: Sync Master, Nasional & Live Event Playlists
+        env:
+          XR3EDTV_API_BASE: ${{ secrets.XR3EDTV_API_BASE }}
+          XR3EDTV_XOR_KEY: ${{ secrets.XR3EDTV_XOR_KEY }}
+          XR3EDTV_SALT_KEY: ${{ secrets.XR3EDTV_SALT_KEY }}
+          XR3EDTV_ONDEMAND_API: ${{ secrets.XR3EDTV_ONDEMAND_API }}
+          XR3EDTV_ONDEMAND_EXTRACT: ${{ secrets.XR3EDTV_ONDEMAND_EXTRACT }}
+          XR3EDTV_ONDEMAND_REFERER: ${{ secrets.XR3EDTV_ONDEMAND_REFERER }}
+          XR3EDTV_REFERER: ${{ secrets.XR3EDTV_REFERER }}
+          XR3EDTV_OUTPUT: 'xr3dtv.m3u8'
+          WORKER_AUTH_KEY: ${{ secrets.WORKER_AUTH_KEY }}
+          WORKER_BASE_URL: ${{ secrets.WORKER_BASE_URL }}
+          NASIONAL_SOURCE_URL: ${{ secrets.NASIONAL_SOURCE_URL }}
+          NASIONAL_OUTPUT: 'nasional.m3u'
+          LIVEEVENT_SRC_URL: ${{ secrets.LIVEEVENT_SRC_URL }}
+          LIVEEVENT_REF_URL: ${{ secrets.LIVEEVENT_REF_URL }}
+          LIVEEVENT_CDN_BASE: ${{ secrets.LIVEEVENT_CDN_BASE }}
+          LIVEEVENT_OUTPUT: 'xr3edtv-liveevent.m3u'
+
+        run: |
+          python scripts/sync_nasional.py
+          python scripts/update_playlist.py
+          python scripts/sync_liveevent.py
+
+      - name: Sync RBTV Live Event 2 Playlist
+        continue-on-error: true
+        env:
+          RBTV_MAIN_URL: ${{ secrets.RBTV_MAIN_URL }}
+          RBTV_API_HOST: ${{ secrets.RBTV_API_HOST }}
+          RBTV_GIST_URL: ${{ secrets.RBTV_GIST_URL }}
+          RBTV_PATH_BS: ${{ secrets.RBTV_PATH_BS }}
+          RBTV_PATH_LIVE: ${{ secrets.RBTV_PATH_LIVE }}
+          RBTV_PATH_DETAIL: ${{ secrets.RBTV_PATH_DETAIL }}
+          RBTV_USER_AGENT: ${{ secrets.RBTV_USER_AGENT }}
+          RBTV_STREAM_REFERER: ${{ secrets.RBTV_STREAM_REFERER }}
+          RBTV_POSTER_URL: ${{ secrets.RBTV_POSTER_URL }}
+          RBTV_RESOLVER_URL: ${{ secrets.RBTV_RESOLVER_URL }}
+          WORKER_AUTH_KEY: ${{ secrets.WORKER_AUTH_KEY }}
+          RBTV_OUTPUT: 'xr3edtv-liveevent2.m3u'
+        run: |
+          python scripts/sync_rbtv.py
+
+      - name: Sync Live Event 3 Playlist
+        continue-on-error: true
+        env:
+          EVENT3_BASE_URL: ${{ secrets.EVENT3_BASE_URL }}
+          EVENT3_ENDPOINTS: ${{ secrets.EVENT3_ENDPOINTS }}
+          EVENT3_PARSER_RULES: ${{ secrets.EVENT3_PARSER_RULES }}
+          EVENT3_DECRYPTOR: ${{ secrets.EVENT3_DECRYPTOR }}
+          EVENT3_HEADERS: ${{ secrets.EVENT3_HEADERS }}
+          EVENT3_OUTPUT: 'xr3edtv-liveevent3.m3u'
+        run: |
+          python scripts/sync_liveevent3.py
+
+      - name: Commit and Push
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --staged --quiet || (git commit -m "Sync master, 24/7 & live sports playlists [skip ci]" && git push origin main --force)
